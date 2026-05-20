@@ -33,16 +33,20 @@ def kalshi_maker_fee(contracts: int, price_cents: int) -> float:
 
 @dataclass
 class RiskConfig:
-    """Risk management configuration."""
-    stake_usd: float = 5.00           # Fixed stake fallback (used when no balance available)
-    kelly_fraction: float = 0.25      # Quarter-Kelly (conservative)
-    max_daily_loss_usd: float = 25.00  # Stop after this daily loss
-    max_weekly_loss_usd: float = 75.00 # Stop after this weekly loss
-    max_concurrent_positions: int = 3   # Max open positions
-    max_position_pct: float = 0.05     # Max 5% of balance per trade
-    min_confidence: float = 0.3        # Minimum strategy confidence to trade
-    cooldown_after_loss_secs: int = 60 # Wait this long after a loss before trading again
-    max_trades_per_hour: int = 20      # Rate limit
+    """High volume demo configuration."""
+
+    stake_usd: float = 1.00
+    kelly_fraction: float = 0.00
+
+    max_daily_loss_usd: float = 100.00
+    max_weekly_loss_usd: float = 500.00
+
+    max_concurrent_positions: int = 25
+    max_position_pct: float = 0.01
+
+    min_confidence: float = 0.00
+    cooldown_after_loss_secs: int = 0
+    max_trades_per_hour: int = 250
 
 
 @dataclass
