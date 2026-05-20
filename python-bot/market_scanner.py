@@ -139,6 +139,13 @@ class MarketScanner:
         if not open_markets:
             return None
 
+        # Drop markets whose close_time is already in the past — the demo
+        # environment sometimes leaves stale "open" markets from prior days.
+        now_utc = datetime.now(timezone.utc).isoformat()
+        open_markets = [m for m in open_markets if m.get("close_time", "") > now_utc]
+        if not open_markets:
+            return None
+
         # Sort by close_time ascending — the soonest closing is the active one
         open_markets.sort(key=lambda m: m.get("close_time", ""))
 

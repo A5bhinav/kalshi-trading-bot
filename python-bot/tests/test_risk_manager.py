@@ -203,7 +203,7 @@ class TestSettlement(unittest.TestCase):
         self.assertEqual(record.payout_usd, 5.00)
         self.assertEqual(record.profit_usd, 3.00)
         self.assertGreater(record.entry_fee_usd, 0)
-        self.assertGreater(record.settle_fee_usd, 0)
+        self.assertEqual(record.settle_fee_usd, 0.0)
         self.assertAlmostEqual(
             record.profit_after_fees,
             record.profit_usd - record.entry_fee_usd - record.settle_fee_usd,

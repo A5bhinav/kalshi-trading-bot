@@ -1013,7 +1013,19 @@ class TradingBot:
 
                 def _public_get(self, path, params=None):
                     url = f"{self.base_url}{path}"
-                    resp = self.session.get(url, params=params)
+                    for attempt in range(5):
+                        resp = self.session.get(url, params=params, timeout=10)
+                        if resp.status_code != 429:
+                            resp.raise_for_status()
+                            return resp.json()
+
+                        retry_after = resp.headers.get("Retry-After")
+                        try:
+                            delay = float(retry_after) if retry_after else 0.5 * (attempt + 1)
+                        except ValueError:
+                            delay = 0.5 * (attempt + 1)
+                        time.sleep(min(delay, 5.0))
+
                     resp.raise_for_status()
                     return resp.json()
 
@@ -1182,12 +1194,50 @@ class TradingBot:
         # Live results confirmed exits whipsawed normal adverse moves into
         # unnecessary losses (~$60 on 2026-04-13).
 
-        # WebSocket feed for real-time Kalshi contract prices
-        self.ws_feed = KalshiWebSocket(
-            key_id=os.getenv("KALSHI_API_KEY_ID"),
-            private_key_path=os.getenv("KALSHI_PRIVATE_KEY_PATH", "~/.key/kalshi/key.pem"),
-            env=os.getenv("KALSHI_ENV", "prod"),
-        )
+        # WebSocket feed for real-time Kalshi contract prices. The WS API is
+        # authenticated, but fresh local paper-mode setups should still boot
+        # without demo/prod keys; scanners will fall back to REST polling.
+        ws_key_id = os.getenv("KALSHI_API_KEY_ID")
+        ws_key_path = os.getenv("KALSHI_PRIVATE_KEY_PATH")
+        if config["paper_trade"] and (not ws_key_id or not ws_key_path):
+            class NullKalshiWebSocket:
+                def subscribe(self, _series_prefixes):
+                    pass
+
+                def enable_recording(self, *args, **kwargs):
+                    pass
+
+                def start(self):
+                    pass
+
+                def stop(self):
+                    pass
+
+                def get_tick(self, _ticker):
+                    return None
+
+                def get_all_ticks(self):
+                    return {}
+
+                def get_yes_prices(self, _ticker):
+                    return None, None
+
+                @property
+                def connected(self):
+                    return False
+
+                @property
+                def stats(self):
+                    return {"messages": 0, "reconnects": 0, "last_msg_ts": 0.0}
+
+            self.ws_feed = NullKalshiWebSocket()
+            self._log("[INIT] Kalshi WS disabled in paper mode (no API keys configured)")
+        else:
+            self.ws_feed = KalshiWebSocket(
+                key_id=ws_key_id,
+                private_key_path=ws_key_path or "~/.key/kalshi/key.pem",
+                env=os.getenv("KALSHI_ENV", "prod"),
+            )
         self.ws_feed.subscribe([
             "KXBTC15M", "KXBTCD", "KXETH15M", "KXETHD", "KXSOL15M", "KXSOLD",
             "KXDOGE15M", "KXDOGED", "KXXRP15M", "KXXRPD",
