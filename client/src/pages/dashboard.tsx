@@ -1023,8 +1023,8 @@ export default function DashboardPage({
             </div>
           </div>
           <div className="r-book">
-            {book && book.asks.map((r) => (
-              <Frag key={`a${r.p}`}>
+            {book && book.asks.map((r, i) => (
+              <Frag key={`a${r.p}-${i}`}>
                 <div className="r-book-row" />
                 <div className="r-book-px">{r.p}¢</div>
                 <div className="r-book-row r-book-ask">
@@ -1041,8 +1041,8 @@ export default function DashboardPage({
                 MID <FmtNum value={mid} decimals={1} suffix="¢" />
               </div>
             )}
-            {book && book.bids.map((r) => (
-              <Frag key={`b${r.p}`}>
+            {book && book.bids.map((r, i) => (
+              <Frag key={`b${r.p}-${i}`}>
                 <div className="r-book-row r-book-bid">
                   <span
                     className="r-bar"
