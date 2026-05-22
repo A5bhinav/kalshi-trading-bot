@@ -1,7 +1,7 @@
 """
 Resolution Rider / High-Probability Grind Strategy
 
-Core idea: Buy contracts ONLY when priced 95-99c — near-certain outcomes
+Core idea: Buy contracts ONLY when priced 80-99c — high-probability outcomes
 where the market has already resolved but a few cents of edge remain.
 
 Validated by:
@@ -10,7 +10,7 @@ Validated by:
 - Our live trading: 100% WR (small sample)
 
 Why this works:
-- At 95-99c, the "wrong" outcome has only 1-5% probability
+- At 80-99c, the "wrong" outcome has only 1-20% probability
 - Liquidity thins near resolution as traders take profit early
 - A disciplined bot captures the final cents before settlement
 - Extremely high win rate enables aggressive Kelly sizing
@@ -61,7 +61,7 @@ class ResolutionRiderStrategy(Strategy):
         # bot also overlays these onto any per-cell rr_params.json entry
         # via HEURISTIC_PARAMS in bot.py, so optimizer output cannot
         # produce an unsafe gate (e.g. 98c entry or sub-0.2% buffer).
-        min_contract_price: int = 94,
+        min_contract_price: int = 80,
         max_entry_price: int = 97,          # HARD CAP: 98c is a break-even trap
         min_seconds: int = 10,              # Final 10s has settlement variance
         max_seconds: int = 180,
@@ -108,13 +108,12 @@ class ResolutionRiderStrategy(Strategy):
         max_ep = min(cp.get("max_entry_price", self.max_entry_price), 97)
         min_secs = cp.get("min_seconds", self.min_seconds)
         max_secs = cp.get("max_seconds", self.max_seconds)
-        # Floor lowered 0.15 → 0.10 on 2026-04-23 to get more setups through
-        # for cells whose trained buffers are well below 0.10 (eth_hourly,
-        # xrp_hourly, doge_15m, etc.). 0.10% is still 5× the 0.021% that
-        # caused the original eth_hourly disaster, so the catastrophic-
-        # buffer protection stays intact. Cells with trained buffers
-        # ≥ 0.10 are unaffected by this change.
-        min_buf = max(cp.get("min_price_buffer_pct", self.min_price_buffer_pct), 0.10)
+        # Floor lowered 0.15 → 0.10 on 2026-04-23, then 0.10 → 0.05 on
+        # 2026-05-21 to allow more setups through at wider entry range
+        # (80-99c). 0.05% is still 2.4× the 0.021% that caused the original
+        # eth_hourly disaster, preserving catastrophic-buffer protection.
+        # Cells with trained buffers ≥ 0.05 are unaffected by this change.
+        min_buf = max(cp.get("min_price_buffer_pct", self.min_price_buffer_pct), 0.05)
         max_adv_mom = cp.get("max_adverse_momentum", self.max_adverse_momentum)
         mom_window = cp.get("momentum_window", self.momentum_window)
         mom_periods = cp.get("momentum_periods", self.momentum_periods)
@@ -181,7 +180,7 @@ class ResolutionRiderStrategy(Strategy):
         yes_avg = (yes_bid + yes_ask) / 2
         no_avg = 100 - yes_avg
 
-        # YES is the near-certain favorite (95-99c)
+        # YES is the near-certain favorite (80-99c)
         if yes_avg >= min_cp:
             our_price = yes_ask
             if our_price > max_ep:
@@ -225,7 +224,7 @@ class ResolutionRiderStrategy(Strategy):
                 max_price_cents=our_price,
             )
 
-        # NO is the near-certain favorite (YES < 5c → NO > 95c)
+        # NO is the near-certain favorite (YES < 20c → NO > 80c)
         if no_avg >= min_cp:
             our_price = 100 - yes_bid  # NO ask price
             if our_price > max_ep:
@@ -268,6 +267,6 @@ class ResolutionRiderStrategy(Strategy):
             )
 
         no_trade.reason = (
-            f"No 95c+ setup (YES@{yes_avg:.0f}c / NO@{no_avg:.0f}c, {secs_left:.0f}s left)"
+            f"No 80c+ setup (YES@{yes_avg:.0f}c / NO@{no_avg:.0f}c, {secs_left:.0f}s left)"
         )
         return no_trade

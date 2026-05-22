@@ -202,7 +202,7 @@ def load_recent_cell_pnl(days: int = 7,
 # a cell on the basis of cumulative P&L. Under this, there's not enough
 # evidence to veto on the cumulative rule — let the cell gather data.
 # The loss-count veto (MAX_7D_LOSSES_VETO) still applies at any n.
-MIN_CELL_VETO_TRADES = int(os.environ.get("MIN_CELL_VETO_TRADES", "5"))
+MIN_CELL_VETO_TRADES = int(os.environ.get("MIN_CELL_VETO_TRADES", "15"))
 
 # Loss-count veto: if a cell logs ≥ this many settled losses in the
 # rolling 7-day window, disable it regardless of cumulative P&L or
@@ -212,9 +212,9 @@ MIN_CELL_VETO_TRADES = int(os.environ.get("MIN_CELL_VETO_TRADES", "5"))
 # fill. Counts are stake-insensitive: 3+ losses in 7d is a signal
 # regardless of whether stakes were $10 or $500.
 #
-# Default 3: at 95% WR a cell should see ≤2 losses/7d on realistic
-# volume; 3+ is outside the noise distribution. Env-tunable.
-MAX_7D_LOSSES_VETO = int(os.environ.get("MAX_7D_LOSSES_VETO", "3"))
+# Default 6: raised from 3 on 2026-05-21 so sparse demo history doesn't
+# disable cells prematurely. Env-tunable.
+MAX_7D_LOSSES_VETO = int(os.environ.get("MAX_7D_LOSSES_VETO", "6"))
 
 
 def evaluate_cell_safety(cell_name: str, v: dict,
@@ -2092,7 +2092,14 @@ class TradingBot:
         def _reconcile_loop():
             # Initial 30s delay to let the bot warm up
             time.sleep(30)
-            last_parallel_count = 0
+            # Seed the baseline from the first silent run so historical
+            # parallel positions (pre-reduce_only fix) don't re-fire the
+            # warning on every restart.
+            try:
+                _seed = reconcile(self.client, verbose=False, backup=False)
+                last_parallel_count = _seed.get("parallel_positions", 0)
+            except Exception:
+                last_parallel_count = 0
             while self.running:
                 try:
                     stats = reconcile(self.client, verbose=False, backup=False)
@@ -2623,7 +2630,7 @@ class TradingBot:
                 # the book to reverse to our price or expires. This is
                 # the behavior we want in the "book-moved" case.
                 cp = cell_params or {}
-                cell_min_cp = cp.get("min_contract_price", 95)
+                cell_min_cp = cp.get("min_contract_price", 80)
                 maker_price = max(bid_price, cell_min_cp)
                 exec_price = min(maker_price, max_price)
                 is_maker = True
@@ -2636,7 +2643,7 @@ class TradingBot:
             # Uses per-cell params so cells with wider bands (e.g. 90-98c)
             # aren't blocked by the strategy-level defaults.
             cp = cell_params or {}
-            strat_min = cp.get("min_contract_price", 95)
+            strat_min = cp.get("min_contract_price", 80)
             strat_max = cp.get("max_entry_price", 98)
             if exec_price < strat_min or exec_price > strat_max:
                 self._log(
