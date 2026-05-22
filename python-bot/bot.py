@@ -1851,7 +1851,7 @@ class TradingBot:
                 else:
                     bid = market_cache.get("yes_bid")
                     ask = market_cache.get("yes_ask")
-                    if not bid or not ask:
+                    if bid is None or ask is None:
                         bump(cell_name, "no_price", ticker=ticker,
                              detail={"secs_left": round(secs_left, 1),
                                      "ws_tick_age_s": (round(tick_age, 1)
@@ -2341,8 +2341,13 @@ class TradingBot:
                     event_key = parts[0] if len(parts) > 1 else ticker
                 else:
                     event_key = ticker
-                if ticker and event_key not in self._traded_tickers:
-                    self._maybe_trade(market, strats, asset_key=key,
+                # RR is handled exclusively by _fast_rr_scan (50Hz thread).
+                # Exclude it here to prevent double-trades from the two
+                # concurrent paths racing on the same ticker window.
+                exec_strats = {k: v for k, v in strats.items()
+                               if k != "resolution_rider"}
+                if exec_strats and ticker and event_key not in self._traded_tickers:
+                    self._maybe_trade(market, exec_strats, asset_key=key,
                                       cell_params=cell_params)
 
         # 2a. Refresh RR market cache for the fast path (internal 5s guard)
@@ -2966,8 +2971,18 @@ class TradingBot:
                                     (o for o in orders if o.get("order_id") == order_id), None
                                 )
                                 if our_order is None:
-                                    # No longer in open orders — likely filled
-                                    self._log(f"      [FILLED] Order no longer resting (assumed filled)")
+                                    # Order left the open-orders list. Verify
+                                    # actual status before assuming a fill —
+                                    # cancelled/expired orders also disappear.
+                                    try:
+                                        detail = self.client._request("GET", f"/portfolio/orders/{order_id}")
+                                        actual_status = detail.get("order", {}).get("status", "")
+                                    except Exception:
+                                        actual_status = ""
+                                    if actual_status in ("canceled", "cancelled", "expired"):
+                                        self._log(f"      [CANCELLED] Order {order_id} was {actual_status}, not filled — skipping")
+                                        break
+                                    self._log(f"      [FILLED] Order no longer resting (status={actual_status or 'unknown'}, assumed filled)")
                                     filled = True
                                     break
                                 cur_status = our_order.get("status", "")
