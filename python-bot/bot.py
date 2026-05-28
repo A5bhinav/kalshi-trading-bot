@@ -216,30 +216,46 @@ MIN_CELL_VETO_TRADES = int(os.environ.get("MIN_CELL_VETO_TRADES", "15"))
 # disable cells prematurely. Env-tunable.
 MAX_7D_LOSSES_VETO = int(os.environ.get("MAX_7D_LOSSES_VETO", "6"))
 
+# CV-based safety floor. Any cell whose cross-validation `cv_val_profit`
+# (in rr_params.json) is below this dollar value is disabled at startup,
+# regardless of live history. This stops cells the optimizer already
+# proved unprofitable on held-out data from trading real money while we
+# wait for the live 7d veto to accumulate enough samples (the live veto
+# needs ≥ MIN_CELL_VETO_TRADES, which can take days). Set to a negative
+# value (e.g. -50) to be more permissive; set RR_ENABLE_ALL=1 to bypass.
+RR_CV_PROFIT_FLOOR = float(os.environ.get("RR_CV_PROFIT_FLOOR", "0"))
+
 
 def evaluate_cell_safety(cell_name: str, v: dict,
                          pnl_by_cell: Optional[dict] = None,
                          enable_all: bool = False,
                          safety_margin: float = 0.0) -> tuple[bool, str]:
-    """Decide whether a cell should be allowed to trade, from live P&L.
+    """Decide whether a cell should be allowed to trade.
 
     Returns (enabled, reason). reason is a short human string when
     disabled, or "" when enabled.
 
     Rules, in order:
       1. RR_ENABLE_ALL=1 → always enable (validation mode).
-      2. ≥ MAX_7D_LOSSES_VETO settled losses in the 7d window → DISABLE
+      2. cv_val_profit < RR_CV_PROFIT_FLOOR → DISABLE (CV gate; cells
+         the optimizer flagged as unprofitable on validation folds
+         don't get to trade live).
+      3. ≥ MAX_7D_LOSSES_VETO settled losses in the 7d window → DISABLE
          (pattern-of-losses veto; applies at any trade count).
-      3. Fewer than MIN_CELL_VETO_TRADES settled trades in the last 7
+      4. Fewer than MIN_CELL_VETO_TRADES settled trades in the last 7
          days → enable (insufficient evidence for cumulative veto).
-      4. Non-negative 7-day cumulative P&L → enable.
-      5. Otherwise → disable with the numbers in the reason string.
+      5. Non-negative 7-day cumulative P&L → enable.
+      6. Otherwise → disable with the numbers in the reason string.
 
-    `v` and `safety_margin` are accepted for backward compatibility
-    with callers that still pass them; the new gate ignores them.
+    `safety_margin` is accepted for backward compatibility with callers
+    that still pass it; the new gate ignores it.
     """
     if enable_all:
         return True, ""
+    cv_profit = (v or {}).get("cv_val_profit")
+    if cv_profit is not None and cv_profit < RR_CV_PROFIT_FLOOR:
+        return False, (f"CV val profit ${cv_profit:+.2f} below floor "
+                       f"${RR_CV_PROFIT_FLOOR:+.2f}")
     stats = (pnl_by_cell or {}).get(
         cell_name,
         {"n_trades": 0, "profit_usd": 0.0, "wins": 0, "worst_loss_usd": 0.0})
