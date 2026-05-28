@@ -469,7 +469,7 @@ class RiskManager:
         elif open_count == 1:
             stake *= 0.8
 
-        if self.config.risk_sizing_enabled:
+        if self.config.risk_sizing_enabled and (confidence > 0 or calibrated_probability is not None):
             risk = self.assess_trade_risk(
                 ticker=ticker,
                 confidence=confidence,

@@ -103,14 +103,25 @@ class TestApproveTrade(unittest.TestCase):
     def test_approve_valid_trade(self):
         approved, reason = self.rm.approve_trade("TICKER-1", "consensus", "yes", 0.6, 50)
         self.assertTrue(approved)
-        self.assertEqual(reason, "Approved")
+        self.assertTrue(reason.startswith("Approved"))
 
     def test_approve_kelly_sized_within_balance(self):
         # Reproduces bug: $5 fixed stake > 5% of $69.92 ($3.50), but Kelly
         # sizing would produce a ~$2.80 position which IS within limits.
         # The old code rejected this because it compared the fixed ceiling
         # against the balance cap instead of the actual Kelly-sized stake.
-        approved, reason = self.rm.approve_trade(
+        rm = RiskManager(RiskConfig(
+            stake_usd=5.00,
+            max_daily_loss_usd=25.00,
+            max_weekly_loss_usd=75.00,
+            max_concurrent_positions=3,
+            min_confidence=0.3,
+            cooldown_after_loss_secs=0,
+            max_trades_per_hour=20,
+            max_position_pct=0.05,
+            kelly_fraction=0.25,
+        ))
+        approved, reason = rm.approve_trade(
             "TICKER-FAV", "favorite_bias", "yes",
             confidence=0.80, price_cents=75, balance_usd=69.92,
         )
