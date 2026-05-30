@@ -324,6 +324,7 @@ def load_config():
         "stake_usd": args.stake or float(os.getenv("STAKE_USD", "10.00")),
         "max_daily_loss": float(os.getenv("MAX_DAILY_LOSS_USD", "25.00")),
         "max_concurrent": int(os.getenv("MAX_CONCURRENT_POSITIONS", "3")),
+        "max_position_pct": float(os.getenv("MAX_POSITION_PCT", "0.05")),
         "poll_interval": 0,  # Legacy — bot runs at full speed via WebSocket
         "strategy": args.strategy or os.getenv("STRATEGY", "resolution_rider"),
         "paper_trade": not args.live and os.getenv("PAPER_TRADE", "true").lower() == "true",
@@ -1199,6 +1200,7 @@ class TradingBot:
             stake_usd=config["stake_usd"],
             max_daily_loss_usd=config["max_daily_loss"],
             max_concurrent_positions=config["max_concurrent"],
+            max_position_pct=config["max_position_pct"],
         )
         self.risk_mgr = RiskManager(risk_config)
 
